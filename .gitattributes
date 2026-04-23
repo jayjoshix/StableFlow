@@ -1,0 +1,12 @@
+# Normalize line endings to LF on commit
+* text=auto eol=lf
+
+# Explicitly keep Dockerfiles and shell scripts as LF
+Dockerfile text eol=lf
+Makefile text eol=lf
+*.sh text eol=lf
+
+# Binary files
+*.exe binary
+*.png binary
+*.jpg binary

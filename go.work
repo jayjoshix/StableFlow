@@ -1,0 +1,14 @@
+go 1.22.0
+
+use (
+	./pkg/auth
+	./pkg/finality
+	./pkg/kafka
+	./pkg/rpc
+	./services/gateway
+	./services/ledger
+	./services/listener
+	./services/reconciler
+	./services/router
+	./services/signer
+)

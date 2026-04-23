@@ -1,0 +1,96 @@
+networks:
+  stableflow:
+    driver: bridge
+
+volumes:
+  pgdata:
+  redpanda-data:
+
+services:
+  # ── PostgreSQL 16 ────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: sf-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: stableflow
+      POSTGRES_PASSWORD: stableflow
+      POSTGRES_DB: stableflow
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stableflow"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - stableflow
+
+  # ── Redpanda (Kafka-compatible, no ZooKeeper) ───────────────
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v23.3.5
+    container_name: sf-redpanda
+    restart: unless-stopped
+    command:
+      - redpanda
+      - start
+      - --smp 1
+      - --memory 512M
+      - --overprovisioned
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr internal://redpanda:8082,external://localhost:18082
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --advertise-rpc-addr redpanda:33145
+      - --mode dev-container
+    ports:
+      - "19092:19092"   # Kafka API (external)
+      - "18081:18081"   # Schema Registry (external)
+      - "18082:18082"   # HTTP Proxy (external)
+      - "9644:9644"     # Admin API
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - stableflow
+
+  # ── Redpanda Console ─────────────────────────────────────────
+  redpanda-console:
+    image: docker.redpanda.com/redpandadata/console:v2.4.3
+    container_name: sf-redpanda-console
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      CONFIG_FILEPATH: ""
+      KAFKA_BROKERS: redpanda:9092
+      KAFKA_SCHEMAREGISTRY_ENABLED: "true"
+      KAFKA_SCHEMAREGISTRY_URLS: http://redpanda:8081
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    networks:
+      - stableflow
+
+  # ── Redis 7 ──────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: sf-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - stableflow
